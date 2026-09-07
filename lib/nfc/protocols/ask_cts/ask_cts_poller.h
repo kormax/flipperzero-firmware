@@ -11,8 +11,8 @@ extern "C" {
 typedef struct AskCtsPoller AskCtsPoller;
 
 typedef enum {
-    AskCtsPollerEventTypeError,
-    AskCtsPollerEventTypeReady,
+    AskCtsPollerEventTypeReadFailed,
+    AskCtsPollerEventTypeReadSuccess,
 } AskCtsPollerEventType;
 
 typedef union {

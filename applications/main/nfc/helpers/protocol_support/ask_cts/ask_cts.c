@@ -7,8 +7,12 @@
 
 #include "../nfc_protocol_support_common.h"
 #include "../nfc_protocol_support_gui_common.h"
+#include "../nfc_protocol_support_render_common.h"
 
-static void nfc_render_ask_cts_info(const AskCtsData* data, FuriString* str) {
+static void nfc_render_ask_cts_info(
+    const AskCtsData* data,
+    NfcProtocolFormatType format_type,
+    FuriString* str) {
     furi_string_cat_printf(
         str,
         "UID: %02X %02X %02X %02X\nProduct code: %02X\nFab code: %02X",
@@ -18,6 +22,17 @@ static void nfc_render_ask_cts_info(const AskCtsData* data, FuriString* str) {
         data->uid[3],
         data->product_code,
         data->fab_code);
+
+    if(format_type == NfcProtocolFormatTypeFull && data->block_count > 0) {
+        furi_string_cat_printf(str, "\n::::::::::::::::::::::[Blocks]::::::::::::::::::::::");
+        for(uint8_t block = 0; block < data->block_count; block += 4) {
+            furi_string_cat_printf(str, "\n%02X", block);
+            for(uint8_t j = 0; j < 4 && (block + j) < data->block_count; j++) {
+                furi_string_cat_printf(
+                    str, " %02X%02X", data->blocks[block + j][0], data->blocks[block + j][1]);
+            }
+        }
+    }
 }
 
 static void nfc_scene_info_on_enter_ask_cts(NfcApp* instance) {
@@ -27,7 +42,7 @@ static void nfc_scene_info_on_enter_ask_cts(NfcApp* instance) {
 
     nfc_append_filename_string_when_present(instance, str);
     furi_string_cat_printf(str, "\e#%s\n", nfc_device_get_name(device, NfcDeviceNameTypeFull));
-    nfc_render_ask_cts_info(data, str);
+    nfc_render_ask_cts_info(data, NfcProtocolFormatTypeFull, str);
     widget_add_text_scroll_element(instance->widget, 0, 0, 128, 64, furi_string_get_cstr(str));
 
     furi_string_free(str);
@@ -38,7 +53,7 @@ static NfcCommand nfc_scene_read_poller_callback_ask_cts(NfcGenericEvent event, 
 
     NfcApp* instance = context;
     const AskCtsPollerEvent* ask_cts_event = event.event_data;
-    if(ask_cts_event->type == AskCtsPollerEventTypeReady) {
+    if(ask_cts_event->type == AskCtsPollerEventTypeReadSuccess) {
         nfc_device_set_data(
             instance->nfc_device, NfcProtocolAskCts, nfc_poller_get_data(instance->poller));
         view_dispatcher_send_custom_event(instance->view_dispatcher, NfcCustomEventPollerSuccess);
@@ -58,7 +73,7 @@ static void nfc_scene_read_success_on_enter_ask_cts(NfcApp* instance) {
     FuriString* str = furi_string_alloc();
 
     furi_string_cat_printf(str, "\e#%s\n", nfc_device_get_name(device, NfcDeviceNameTypeFull));
-    nfc_render_ask_cts_info(data, str);
+    nfc_render_ask_cts_info(data, NfcProtocolFormatTypeShort, str);
     widget_add_text_scroll_element(instance->widget, 0, 0, 128, 52, furi_string_get_cstr(str));
 
     furi_string_free(str);

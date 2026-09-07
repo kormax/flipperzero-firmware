@@ -6,8 +6,8 @@
 #define ASK_CTS_PROTOCOL_NAME   "ASK CTS"
 #define ASK_CTS_PRODUCT_KEY     "Product Code"
 #define ASK_CTS_FAB_KEY         "Fab Code"
-#define ASK_CTS_PRODUCT_CTS256B (0x50U)
-#define ASK_CTS_PRODUCT_CTS512B (0x60U)
+#define ASK_CTS_BLOCK_COUNT_KEY "Blocks total"
+#define ASK_CTS_BLOCK_KEY       "Block %u"
 
 static AskCtsData* ask_cts_alloc(void) {
     return malloc(sizeof(AskCtsData));
@@ -39,18 +39,66 @@ static bool ask_cts_load(AskCtsData* data, FlipperFormat* ff, uint32_t version) 
     furi_check(data);
     furi_check(ff);
 
-    return version >= NFC_UNIFIED_FORMAT_VERSION &&
-           flipper_format_read_hex(ff, ASK_CTS_PRODUCT_KEY, &data->product_code, 1) &&
-           flipper_format_read_hex(ff, ASK_CTS_FAB_KEY, &data->fab_code, 1);
+    bool parsed = false;
+    FuriString* key = furi_string_alloc();
+    uint32_t block_count = 0;
+
+    do {
+        if(version < NFC_UNIFIED_FORMAT_VERSION) break;
+        if(!flipper_format_read_hex(ff, ASK_CTS_PRODUCT_KEY, &data->product_code, 1)) break;
+        if(!flipper_format_read_hex(ff, ASK_CTS_FAB_KEY, &data->fab_code, 1)) break;
+        if(!flipper_format_read_uint32(ff, ASK_CTS_BLOCK_COUNT_KEY, &block_count, 1)) break;
+        if(block_count > ASK_CTS_MAX_BLOCK_COUNT) break;
+        data->block_count = block_count;
+
+        bool blocks_parsed = true;
+        for(uint8_t block = 0; block < data->block_count; block++) {
+            furi_string_printf(key, ASK_CTS_BLOCK_KEY, block);
+            if(!flipper_format_read_hex(
+                   ff, furi_string_get_cstr(key), data->blocks[block], ASK_CTS_BLOCK_SIZE)) {
+                blocks_parsed = false;
+                break;
+            }
+        }
+        if(!blocks_parsed) break;
+
+        parsed = true;
+    } while(false);
+
+    furi_string_free(key);
+    return parsed;
 }
 
 static bool ask_cts_save(const AskCtsData* data, FlipperFormat* ff) {
     furi_check(data);
     furi_check(ff);
 
-    return flipper_format_write_comment_cstr(ff, ASK_CTS_PROTOCOL_NAME " specific data") &&
-           flipper_format_write_hex(ff, ASK_CTS_PRODUCT_KEY, &data->product_code, 1) &&
-           flipper_format_write_hex(ff, ASK_CTS_FAB_KEY, &data->fab_code, 1);
+    bool saved = false;
+    FuriString* key = furi_string_alloc();
+    const uint32_t block_count = data->block_count;
+
+    do {
+        if(!flipper_format_write_comment_cstr(ff, ASK_CTS_PROTOCOL_NAME " specific data")) break;
+        if(!flipper_format_write_hex(ff, ASK_CTS_PRODUCT_KEY, &data->product_code, 1)) break;
+        if(!flipper_format_write_hex(ff, ASK_CTS_FAB_KEY, &data->fab_code, 1)) break;
+        if(!flipper_format_write_uint32(ff, ASK_CTS_BLOCK_COUNT_KEY, &block_count, 1)) break;
+
+        bool blocks_saved = true;
+        for(uint8_t block = 0; block < data->block_count; block++) {
+            furi_string_printf(key, ASK_CTS_BLOCK_KEY, block);
+            if(!flipper_format_write_hex(
+                   ff, furi_string_get_cstr(key), data->blocks[block], ASK_CTS_BLOCK_SIZE)) {
+                blocks_saved = false;
+                break;
+            }
+        }
+        if(!blocks_saved) break;
+
+        saved = true;
+    } while(false);
+
+    furi_string_free(key);
+    return saved;
 }
 
 static bool ask_cts_is_equal(const AskCtsData* data, const AskCtsData* other) {
